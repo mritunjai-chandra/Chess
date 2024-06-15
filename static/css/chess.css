@@ -15,6 +15,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    position: relative;
 }
 
 .square.white {
@@ -28,5 +29,16 @@
 .piece {
     width: 75px;
     height: 75px;
-    pointer-events: none;
+    position: absolute;
+    transition: transform 0.3s ease; /* Smooth animation */
+    cursor: grab;
 }
+
+.piece:active {
+    cursor: grabbing;
+}
+
+.highlight {
+    outline: 3px solid yellow;
+}
+

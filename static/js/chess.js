@@ -1,7 +1,15 @@
 // static/js/chess.js
 document.addEventListener("DOMContentLoaded", () => {
+    console.log("JS Event Listener")
     const chessboardElement = document.getElementById('chessboard');
+    let selectedPiece = null;
     
+    const roomName = "{{ room_name }}".replace(/[^a-zA-Z0-9_-]/g, '');
+    console.log("room_name", roomName)
+    
+    const chessSocket = new WebSocket(
+        `ws://${window.location.host}/ws/chess/${roomName}/`
+    );
     // Pieces data, replace this with a fetch or dynamic source if needed
     const initialPieces = {
         "white": [
@@ -62,6 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const renderBoard = () => {
+        console.log("JS Render Board")
         chessboardElement.innerHTML = '';
 
         for (let row = 8; row >= 1; row--) {
@@ -71,6 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 square.className = `square ${isWhiteSquare ? 'white' : 'black'}`;
                 square.dataset.row = row;
                 square.dataset.column = column;
+                square.addEventListener('click', onSquareClick);
                 chessboardElement.appendChild(square);
             }
         }
@@ -81,6 +91,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const placePiece = (piece) => {
+        console.log("JS Place piece")
         const { name, colour, row, column } = piece;
         const index = (8 - row) * 8 + (column - 1);
         const pieceElement = document.createElement('img');
@@ -91,8 +102,84 @@ document.addEventListener("DOMContentLoaded", () => {
         pieceElement.dataset.column = column;
         pieceElement.dataset.colour = colour;
         pieceElement.dataset.name = name;
+        pieceElement.addEventListener('dragstart', onDragStart);
+        pieceElement.addEventListener('dragend', onDragEnd);
         chessboardElement.children[index].appendChild(pieceElement);
     };
 
+    const onDragStart = (event) => {
+        console.log("JS drag start")
+        selectedPiece = event.target;
+        selectedPiece.classList.add('dragging');
+    };
+    
+    const onDragEnd = () => {
+        console.log("JS drag end")
+        if (selectedPiece) {
+            selectedPiece.classList.remove('dragging');
+            selectedPiece.style.zIndex = 100;
+    
+            // Get the final square where the piece was dropped
+            const finalSquare = selectedPiece.parentElement;
+    
+            // Calculate the new position (row and column) based on the final square
+            const row = parseInt(finalSquare.dataset.row);
+            const column = parseInt(finalSquare.dataset.column);
+    
+            // Move the piece to the final square with a smooth transition
+            movePieceToSquare(selectedPiece, finalSquare, row, column);
+    
+            selectedPiece = null;
+            draggedOverSquare = null;
+        }
+    };
+
+    const onSquareClick = (event) => {
+        console.log("JS square click")
+        const square = event.currentTarget;
+
+        if (selectedPiece) {
+            movePieceToSquare(selectedPiece, square);
+            selectedPiece = null;
+        } else if (square.firstChild) {
+            selectedPiece = square.firstChild;
+            selectedPiece.classList.add('highlight');
+        }
+    };
+
+    const movePieceToSquare = (piece, square) => {
+        console.log("JS move piece to square")
+        const targetIndex = Array.from(chessboardElement.children).indexOf(square);
+        const row = 8 - Math.floor(targetIndex / 8);
+        const column = (targetIndex % 8) + 1;
+
+        piece.style.transform = `translate(${square.offsetLeft - piece.parentElement.offsetLeft}px, ${square.offsetTop - piece.parentElement.offsetTop}px)`;
+
+        setTimeout(() => {
+            piece.style.transform = '';
+            piece.dataset.row = row;
+            piece.dataset.column = column;
+            square.appendChild(piece);
+            piece.classList.remove('highlight');
+            sendMoveToServer(piece.dataset.name, piece.dataset.colour, piece.dataset.row, piece.dataset.column, row, column);
+        }, 300);
+    };
+
+    const sendMoveToServer = (name, colour, startRow, startColumn, endRow, endColumn) => {
+        console.log("send move to server js")
+        const moveData = {
+            name: name,
+            colour: colour,
+            startRow: startRow,
+            startColumn: startColumn,
+            endRow: endRow,
+            endColumn: endColumn
+        };
+
+        chessSocket.send(JSON.stringify({ 'move': moveData }));
+        console.log('Move sent to server:', moveData);
+    };
+
+    console.log("JS begin rendering board")
     renderBoard();
 });

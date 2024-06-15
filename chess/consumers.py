@@ -1,11 +1,12 @@
 # chess/consumers.py
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+import re
 
 class ChessConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_name = self.scope['url_route']['kwargs']['room_name']
-        self.room_group_name = f'chess_{self.room_name}'
+        self.room_group_name = f'{self.room_name}'
         print("Consumer connected to websocket")
 
         await self.channel_layer.group_add(
