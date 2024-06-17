@@ -5,6 +5,7 @@ import re
 
 class ChessConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        global global_game_rooms
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'{self.room_name}'
         print("Consumer connected to websocket")
@@ -28,6 +29,7 @@ class ChessConsumer(AsyncWebsocketConsumer):
         move = data['move']
 
         # Broadcast move to the group
+        print("Broadcasting move to group")
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -38,8 +40,8 @@ class ChessConsumer(AsyncWebsocketConsumer):
 
     async def chess_move(self, event):
         print("Consumer chess move")
-        move = event['move']
-        # Send move to WebSocket
+        # Send event to WebSocket
+        print(f"event: {event}")
         await self.send(text_data=json.dumps({
-            'move': move
+            'event': event
         }))

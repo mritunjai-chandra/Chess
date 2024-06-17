@@ -3,14 +3,24 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("JS Event Listener")
     const chessboardElement = document.getElementById('chessboard');
     let selectedPiece = null;
-    
+    let isReceivingMove = false;  // Flag to prevent loopback
+
     const roomName = "{{ room_name }}".replace(/[^a-zA-Z0-9_-]/g, '');
-    console.log("room_name", roomName)
+    console.log("room_name", {roomName})
     
     const chessSocket = new WebSocket(
         `ws://${window.location.host}/ws/chess/${roomName}/`
     );
-    // Pieces data, replace this with a fetch or dynamic source if needed
+
+    chessSocket.onmessage = function(event) {
+        console.log("onMessage received event", {event})
+        const data = JSON.parse(event.data)["event"];
+        console.log("onmessage data:", {data})
+        if (data.type === 'chess_move') {
+            handleReceivedMove(data.move);
+        }
+    };
+
     const initialPieces = {
         "white": [
             { "name": "pawn", "colour": "white", "row": 2, "column": 1 },
@@ -130,7 +140,6 @@ document.addEventListener("DOMContentLoaded", () => {
             movePieceToSquare(selectedPiece, finalSquare, row, column);
     
             selectedPiece = null;
-            draggedOverSquare = null;
         }
     };
 
@@ -139,7 +148,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const square = event.currentTarget;
 
         if (selectedPiece) {
-            movePieceToSquare(selectedPiece, square);
+            movePieceToSquare(selectedPiece, square, parseInt(square.dataset.row), parseInt(square.dataset.column));
             selectedPiece = null;
         } else if (square.firstChild) {
             selectedPiece = square.firstChild;
@@ -147,11 +156,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    const movePieceToSquare = (piece, square) => {
+    const movePieceToSquare = (piece, square, row, column) => {
         console.log("JS move piece to square")
-        const targetIndex = Array.from(chessboardElement.children).indexOf(square);
-        const row = 8 - Math.floor(targetIndex / 8);
-        const column = (targetIndex % 8) + 1;
+
+        const startRow = parseInt(piece.dataset.row);
+        const startColumn = parseInt(piece.dataset.column);
 
         piece.style.transform = `translate(${square.offsetLeft - piece.parentElement.offsetLeft}px, ${square.offsetTop - piece.parentElement.offsetTop}px)`;
 
@@ -161,7 +170,10 @@ document.addEventListener("DOMContentLoaded", () => {
             piece.dataset.column = column;
             square.appendChild(piece);
             piece.classList.remove('highlight');
-            sendMoveToServer(piece.dataset.name, piece.dataset.colour, piece.dataset.row, piece.dataset.column, row, column);
+
+            if (!isReceivingMove) {
+                sendMoveToServer(piece.dataset.name, piece.dataset.colour, startRow, startColumn, row, column);
+            }
         }, 300);
     };
 
@@ -175,9 +187,36 @@ document.addEventListener("DOMContentLoaded", () => {
             endRow: endRow,
             endColumn: endColumn
         };
+        data = JSON.stringify({ 'type': 'move', 'move': moveData })
 
-        chessSocket.send(JSON.stringify({ 'move': moveData }));
-        console.log('Move sent to server:', moveData);
+        chessSocket.send(data);
+        console.log('Move sent to server:', data);
+    };
+
+    const handleReceivedMove = (move) => {
+        console.log("handle received move js", move)
+        isReceivingMove = true;
+
+        // Find the piece on the board
+        const piece = Array.from(chessboardElement.getElementsByClassName('piece')).find(p => {
+            return p.dataset.name === move.name &&
+                   p.dataset.colour === move.colour &&
+                   parseInt(p.dataset.row) === move.startRow &&
+                   parseInt(p.dataset.column) === move.startColumn;
+        });
+
+        if (piece) {
+            const square = Array.from(chessboardElement.children).find(square => {
+                return parseInt(square.dataset.row) === move.endRow &&
+                       parseInt(square.dataset.column) === move.endColumn;
+            });
+
+            if (square) {
+                movePieceToSquare(piece, square, move.endRow, move.endColumn);
+            }
+        }
+
+        isReceivingMove = false;
     };
 
     console.log("JS begin rendering board")
