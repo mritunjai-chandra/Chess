@@ -5,8 +5,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedPiece = null;
     let isReceivingMove = false;  // Flag to prevent loopback
 
-    const roomName = "{{ room_name }}".replace(/[^a-zA-Z0-9_-]/g, '');
-    console.log("room_name", {roomName})
+    const roomName = "{room_name}".replace(/[^a-zA-Z0-9_-]/g, '');
+    console.log("room_name", roomName)
     
     const chessSocket = new WebSocket(
         `ws://${window.location.host}/ws/chess/${roomName}/`
@@ -14,10 +14,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     chessSocket.onmessage = function(event) {
         console.log("onMessage received event", {event})
+        // selectedPiece = null;
         const data = JSON.parse(event.data)["event"];
         console.log("onmessage data:", {data})
         if (data.type === 'chess_move') {
-            handleReceivedMove(data.move);
+            handleReceivedMove(data.move, data.drag);
         }
     };
 
@@ -79,6 +80,23 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
+    const placePiece = (piece) => {
+        console.log("JS Place piece")
+        const { name, colour, row, column } = piece;
+        const index = (8 - row) * 8 + (column - 1);
+        const pieceElement = document.createElement('img');
+        pieceElement.src = graphicVectorStore[colour][name];
+        pieceElement.className = 'piece';
+        pieceElement.draggable = true;
+        pieceElement.dataset.row = row;
+        pieceElement.dataset.column = column;
+        pieceElement.dataset.colour = colour;
+        pieceElement.dataset.name = name;
+        pieceElement.addEventListener('dragstart', onDragStart);
+        pieceElement.addEventListener('dragend', onDragEnd);
+        chessboardElement.children[index].appendChild(pieceElement);
+    };
+
     const renderBoard = () => {
         console.log("JS Render Board")
         chessboardElement.innerHTML = '';
@@ -100,26 +118,10 @@ document.addEventListener("DOMContentLoaded", () => {
         initialPieces.black.forEach(piece => placePiece(piece));
     };
 
-    const placePiece = (piece) => {
-        console.log("JS Place piece")
-        const { name, colour, row, column } = piece;
-        const index = (8 - row) * 8 + (column - 1);
-        const pieceElement = document.createElement('img');
-        pieceElement.src = graphicVectorStore[colour][name];
-        pieceElement.className = 'piece';
-        pieceElement.draggable = true;
-        pieceElement.dataset.row = row;
-        pieceElement.dataset.column = column;
-        pieceElement.dataset.colour = colour;
-        pieceElement.dataset.name = name;
-        pieceElement.addEventListener('dragstart', onDragStart);
-        pieceElement.addEventListener('dragend', onDragEnd);
-        chessboardElement.children[index].appendChild(pieceElement);
-    };
-
     const onDragStart = (event) => {
         console.log("JS drag start")
         selectedPiece = event.target;
+        console.log("selected piece", selectedPiece)
         selectedPiece.classList.add('dragging');
     };
     
@@ -135,10 +137,10 @@ document.addEventListener("DOMContentLoaded", () => {
             // Calculate the new position (row and column) based on the final square
             const row = parseInt(finalSquare.dataset.row);
             const column = parseInt(finalSquare.dataset.column);
-    
+
             // Move the piece to the final square with a smooth transition
-            movePieceToSquare(selectedPiece, finalSquare, row, column);
-    
+            movePieceToSquare(selectedPiece, finalSquare, row, column, drag=true);
+            
             selectedPiece = null;
         }
     };
@@ -156,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    const movePieceToSquare = (piece, square, row, column) => {
+    const movePieceToSquare = (piece, square, row, column, drag = false) => {
         console.log("JS move piece to square")
 
         const startRow = parseInt(piece.dataset.row);
@@ -172,12 +174,12 @@ document.addEventListener("DOMContentLoaded", () => {
             piece.classList.remove('highlight');
 
             if (!isReceivingMove) {
-                sendMoveToServer(piece.dataset.name, piece.dataset.colour, startRow, startColumn, row, column);
+                sendMoveToServer(piece.dataset.name, piece.dataset.colour, startRow, startColumn, row, column, drag);
             }
         }, 300);
     };
 
-    const sendMoveToServer = (name, colour, startRow, startColumn, endRow, endColumn) => {
+    const sendMoveToServer = (name, colour, startRow, startColumn, endRow, endColumn, drag) => {
         console.log("send move to server js")
         const moveData = {
             name: name,
@@ -185,15 +187,16 @@ document.addEventListener("DOMContentLoaded", () => {
             startRow: startRow,
             startColumn: startColumn,
             endRow: endRow,
-            endColumn: endColumn
+            endColumn: endColumn,
+            drag: drag,
         };
-        data = JSON.stringify({ 'type': 'move', 'move': moveData })
+        data = JSON.stringify({ 'type': 'move', 'move': moveData, 'drag': drag })
 
         chessSocket.send(data);
         console.log('Move sent to server:', data);
     };
 
-    const handleReceivedMove = (move) => {
+    const handleReceivedMove = (move, drag=false) => {
         console.log("handle received move js", move)
         isReceivingMove = true;
 
@@ -205,6 +208,8 @@ document.addEventListener("DOMContentLoaded", () => {
                    parseInt(p.dataset.column) === move.startColumn;
         });
 
+        console.log("handle received move state 2, found piece", piece)
+
         if (piece) {
             const square = Array.from(chessboardElement.children).find(square => {
                 return parseInt(square.dataset.row) === move.endRow &&
@@ -212,9 +217,11 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             if (square) {
+                console.log("handle received move state 3, found square", square)
                 movePieceToSquare(piece, square, move.endRow, move.endColumn);
             }
         }
+        console.log("handle received move state 4")
 
         isReceivingMove = false;
     };

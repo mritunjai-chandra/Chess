@@ -8,7 +8,7 @@ class ChessConsumer(AsyncWebsocketConsumer):
         global global_game_rooms
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'{self.room_name}'
-        print("Consumer connected to websocket")
+        print(f"Consumer connected to websocket, room_group_name: {self.room_group_name}")
 
         await self.channel_layer.group_add(
             self.room_group_name,
@@ -27,6 +27,7 @@ class ChessConsumer(AsyncWebsocketConsumer):
         print("Consumer received message")
         data = json.loads(text_data)
         move = data['move']
+        drag = data.get("drag", False)
 
         # Broadcast move to the group
         print("Broadcasting move to group")
@@ -34,7 +35,8 @@ class ChessConsumer(AsyncWebsocketConsumer):
             self.room_group_name,
             {
                 'type': 'chess_move',
-                'move': move
+                'move': move,
+                'drag': drag,
             }
         )
 
