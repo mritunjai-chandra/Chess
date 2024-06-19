@@ -1,20 +1,22 @@
-// static/js/chess.js
 document.addEventListener("DOMContentLoaded", () => {
     console.log("JS Event Listener")
     const chessboardElement = document.getElementById('chessboard');
     let selectedPiece = null;
     let isReceivingMove = false;  // Flag to prevent loopback
 
+    // TODO: fix room_name
     const roomName = "{room_name}".replace(/[^a-zA-Z0-9_-]/g, '');
     console.log("room_name", roomName)
+
+    const socket_url = `ws://${window.location.host}/ws/chess/${roomName}/`
+    console.log("socket URL", socket_url)
     
     const chessSocket = new WebSocket(
-        `ws://${window.location.host}/ws/chess/${roomName}/`
+        socket_url
     );
 
     chessSocket.onmessage = function(event) {
         console.log("onMessage received event", {event})
-        // selectedPiece = null;
         const data = JSON.parse(event.data)["event"];
         console.log("onmessage data:", {data})
         if (data.type === 'chess_move') {
@@ -81,7 +83,6 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const placePiece = (piece) => {
-        console.log("JS Place piece")
         const { name, colour, row, column } = piece;
         const index = (8 - row) * 8 + (column - 1);
         const pieceElement = document.createElement('img');
@@ -92,6 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pieceElement.dataset.column = column;
         pieceElement.dataset.colour = colour;
         pieceElement.dataset.name = name;
+        pieceElement.dataset.index = index;
         pieceElement.addEventListener('dragstart', onDragStart);
         pieceElement.addEventListener('dragend', onDragEnd);
         chessboardElement.children[index].appendChild(pieceElement);
@@ -108,6 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 square.className = `square ${isWhiteSquare ? 'white' : 'black'}`;
                 square.dataset.row = row;
                 square.dataset.column = column;
+                square.dataset.index =  (8 - row) * 8 + (column - 1);
                 square.addEventListener('click', onSquareClick);
                 chessboardElement.appendChild(square);
             }
@@ -121,36 +124,44 @@ document.addEventListener("DOMContentLoaded", () => {
     const onDragStart = (event) => {
         console.log("JS drag start")
         selectedPiece = event.target;
-        console.log("selected piece", selectedPiece)
+        console.log("selected piece location", selectedPiece.dataset.row, selectedPiece.dataset.column)
         selectedPiece.classList.add('dragging');
     };
     
-    const onDragEnd = () => {
+    const onDragEnd = (event) => {
         console.log("JS drag end")
         if (selectedPiece) {
             selectedPiece.classList.remove('dragging');
-            selectedPiece.style.zIndex = 100;
     
             // Get the final square where the piece was dropped
-            const finalSquare = selectedPiece.parentElement;
-    
-            // Calculate the new position (row and column) based on the final square
-            const row = parseInt(finalSquare.dataset.row);
-            const column = parseInt(finalSquare.dataset.column);
+            // const finalSquare = selectedPiece.parentElement;
+            const finalSquare = document.elementFromPoint(event.clientX, event.clientY).closest('.square');
+            if (finalSquare === null){
+                console.log("invalid final position, move denied")
+            } else {
+                console.log("final piece location", finalSquare.dataset.row, finalSquare.dataset.column)
+                // Calculate the new position (row and column) based on the final square
+                const row = parseInt(finalSquare.dataset.row);
+                const column = parseInt(finalSquare.dataset.column);
 
-            // Move the piece to the final square with a smooth transition
-            movePieceToSquare(selectedPiece, finalSquare, row, column, drag=true);
-            
+                // Move the piece to the final square with a smooth transition
+                movePieceToSquare(selectedPiece, finalSquare, row, column, drag=true);
+            }
             selectedPiece = null;
         }
-    };
+    };  
 
     const onSquareClick = (event) => {
         console.log("JS square click")
         const square = event.currentTarget;
 
         if (selectedPiece) {
-            movePieceToSquare(selectedPiece, square, parseInt(square.dataset.row), parseInt(square.dataset.column));
+            if (parseInt(square.dataset.row) !== parseInt(selectedPiece.dataset.row) || parseInt(square.dataset.column) !== parseInt(selectedPiece.dataset.column)){
+                movePieceToSquare(selectedPiece, square, parseInt(square.dataset.row), parseInt(square.dataset.column));
+            } else {
+                console.log("de-selected piece")
+            }
+            selectedPiece.classList.remove('highlight');
             selectedPiece = null;
         } else if (square.firstChild) {
             selectedPiece = square.firstChild;
@@ -158,25 +169,74 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
+    function isValidMove(piece, newSquare){
+        index = 8*(8-piece.dataset.row) + (piece.dataset.column - 1);
+        oldSquare = chessboardElement.children[index]
+
+        newSquarePiece = newSquare.firstChild
+        if (newSquarePiece !== null && newSquarePiece.dataset.colour === piece.dataset.colour){
+            return false;
+        }
+
+        // if no previous condition satisfies, it's a valid move
+        return true;
+    }
+
     const movePieceToSquare = (piece, square, row, column, drag = false) => {
         console.log("JS move piece to square")
 
         const startRow = parseInt(piece.dataset.row);
         const startColumn = parseInt(piece.dataset.column);
 
-        piece.style.transform = `translate(${square.offsetLeft - piece.parentElement.offsetLeft}px, ${square.offsetTop - piece.parentElement.offsetTop}px)`;
+        if (row === startRow && column === startColumn){
+            console.log("start and end positions are same")
+            return
+        }
 
-        setTimeout(() => {
-            piece.style.transform = '';
+        if (isValidMove(piece, square) === false){
+            console.log("Denied invalied move")
+            return
+        }
+
+        if (drag === true){
+            // move is instrumented using mouse click+drag => DO NOT apply animation
+            piece.style.transform = ``
             piece.dataset.row = row;
             piece.dataset.column = column;
+            piece.dataset.index = (8-row)*8 + (column - 1);
+            square.replaceChildren();
             square.appendChild(piece);
+            console.log("final square children", square.children)
             piece.classList.remove('highlight');
 
             if (!isReceivingMove) {
                 sendMoveToServer(piece.dataset.name, piece.dataset.colour, startRow, startColumn, row, column, drag);
             }
-        }, 300);
+
+        } else {
+            // move is instrumented using mouse click => apply animation
+
+            piece.style.zIndex = '1000';
+
+            piece.style.transform = `translate(${square.offsetLeft - piece.parentElement.offsetLeft}px, ${square.offsetTop - piece.parentElement.offsetTop}px)`;
+            piece.style.transition = 'transform 0.3s ease';
+
+            setTimeout(() => {
+                piece.style.transform = ``
+                piece.style.zIndex = 0;
+                piece.dataset.row = row;
+                piece.dataset.column = column;
+                piece.dataset.index = (8-row)*8 + (column - 1);
+                square.replaceChildren();
+                square.appendChild(piece);
+                piece.classList.remove('highlight');
+
+                if (!isReceivingMove) {
+                    sendMoveToServer(piece.dataset.name, piece.dataset.colour, startRow, startColumn, row, column, drag);
+                }
+            }, 300);
+
+        }
     };
 
     const sendMoveToServer = (name, colour, startRow, startColumn, endRow, endColumn, drag) => {
