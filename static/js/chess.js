@@ -5,8 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let isReceivingMove = false;  // Flag to prevent loopback
 
     // TODO: fix room_name
-    const roomName = "{room_name}".replace(/[^a-zA-Z0-9_-]/g, '');
-    console.log("room_name", roomName)
+    const roomName =  window.roomName.replace(/[^a-zA-Z0-9_-]/g, '');
 
     const socket_url = `ws://${window.location.host}/ws/chess/${roomName}/`
     console.log("socket URL", socket_url)

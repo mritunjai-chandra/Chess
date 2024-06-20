@@ -6,6 +6,11 @@
     <title>Chess Room</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/chess.css' %}">
+    <script type="text/javascript">
+        // Pass room_name to JavaScript
+        window.roomName = "{{ room_name|escapejs }}";
+        console.log("roomName", roomName)
+    </script>
 </head>
 <body>
     <div id="chessboard"></div>
