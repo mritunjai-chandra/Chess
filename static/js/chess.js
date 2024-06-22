@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const socket_url = `ws://${window.location.host}/ws/chess/${roomName}/`
     console.log("socket URL", socket_url)
+    console.log("playerColour", playerColour)
     
     const chessSocket = new WebSocket(
         socket_url
@@ -22,6 +23,14 @@ document.addEventListener("DOMContentLoaded", () => {
             handleReceivedMove(data.move, data.drag);
         }
     };
+
+    function calculateIndex(row, column, playerColour){
+        if (playerColour === 'white'){
+            return (8 - row) * 8 + (column - 1);
+        } else{
+            return (row - 1) * 8 + (8 -column);
+        }
+    }
 
     const initialPieces = {
         "white": [
@@ -81,9 +90,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    const placePiece = (piece) => {
+    const placePiece = (piece, playerColour) => {
         const { name, colour, row, column } = piece;
-        const index = (8 - row) * 8 + (column - 1);
+        const index = calculateIndex(row, column, playerColour);
         const pieceElement = document.createElement('img');
         pieceElement.src = graphicVectorStore[colour][name];
         pieceElement.className = 'piece';
@@ -101,23 +110,32 @@ document.addEventListener("DOMContentLoaded", () => {
     const renderBoard = () => {
         console.log("JS Render Board")
         chessboardElement.innerHTML = '';
+        for (let i = 0; i < 64; i++){
+            const square = document.createElement('div');
+            square.className = null;
+            square.dataset.row = null;
+            square.dataset.column = null;
+            square.dataset.index =  i;
+            chessboardElement.appendChild(square);
+        }
 
         for (let row = 8; row >= 1; row--) {
             for (let column = 1; column <= 8; column++) {
-                const square = document.createElement('div');
+                index = calculateIndex(row, column, playerColour);
+                console.log("index", index)
+                square = chessboardElement.children[index];
                 const isWhiteSquare = (row + column) % 2 === 0;
                 square.className = `square ${isWhiteSquare ? 'white' : 'black'}`;
                 square.dataset.row = row;
                 square.dataset.column = column;
-                square.dataset.index =  (8 - row) * 8 + (column - 1);
+                square.dataset.index =  calculateIndex(row, column, playerColour);
                 square.addEventListener('click', onSquareClick);
-                chessboardElement.appendChild(square);
             }
         }
 
         // Place the initial pieces on the board
-        initialPieces.white.forEach(piece => placePiece(piece));
-        initialPieces.black.forEach(piece => placePiece(piece));
+        initialPieces.white.forEach(piece => placePiece(piece, playerColour));
+        initialPieces.black.forEach(piece => placePiece(piece, playerColour));
     };
 
     const onDragStart = (event) => {
